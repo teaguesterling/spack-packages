@@ -66,6 +66,17 @@ class Grpc(CMakePackage):
         description="Use the specified C++ standard when building.",
     )
 
+    variant(
+        "systemd",
+        default=True,
+        description="Link libsystemd if CMake finds it; otherwise never link it",
+    )
+    variant(
+        "download_archives",
+        default=True,
+        description="Download the protos of empty third_party directories during CMake",
+    )
+
     depends_on("c", type="build")
     depends_on("cxx", type="build")
 
@@ -77,6 +88,8 @@ class Grpc(CMakePackage):
     depends_on("protobuf@:29", when="@:1.68")
 
     depends_on("openssl")
+    # grpc_tls_crl_provider.cc assigns the const X509_NAME* of OpenSSL 4 to a mutable pointer
+    depends_on("openssl@:3", when="@1.76")
     depends_on("zlib-api")
     depends_on("c-ares")
 
@@ -112,6 +125,12 @@ class Grpc(CMakePackage):
             args.append("-DgRPC_ABSL_PROVIDER:String=package")
         if self.spec.satisfies("@1.33.1:"):
             args.append("-DgRPC_RE2_PROVIDER:String=package")
+        # As the vcpkg port does. A build with no network fails without this.
+        if self.spec.satisfies("~download_archives"):
+            args.append(self.define("gRPC_DOWNLOAD_ARCHIVES", False))
+        # The build finds libsystemd on the host, so a static library then needs it
+        if self.spec.satisfies("~systemd"):
+            args.append(self.define("gRPC_USE_SYSTEMD", False))
         return args
 
     def patch(self):
@@ -146,3 +165,17 @@ class Grpc(CMakePackage):
                 '#include <algorithm>\n#include "absl/strings/string_view.h"',
                 glob_path,
             )
+
+        # abseil-cpp@20260107 no longer includes these headers transitively. grpc 1.78 adds
+        # them, as 00017-add-missing-include-file.patch of the vcpkg port does for 1.76.
+        if self.spec.satisfies("@1.76 ^abseil-cpp@20260107:"):
+            for header, path in (
+                ("string", "include/grpc/event_engine/memory_request.h"),
+                ("limits", "src/core/channelz/v2tov1/property_list.cc"),
+                ("algorithm", "src/core/util/glob.cc"),
+            ):
+                filter_file(
+                    r'^(#include "absl/strings/string_view.h")',
+                    f"#include <{header}>\n\\1",
+                    join_path(self.stage.source_path, path),
+                )
