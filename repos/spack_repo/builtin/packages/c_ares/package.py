@@ -22,8 +22,25 @@ class CAres(CMakePackage):
     version("1.15.0", sha256="7deb7872cbd876c29036d5f37e30c4cbc3cc068d59d8b749ef85bb0736649f04")
     version("1.13.0", sha256="7c48c57706a38691041920e705d2a04426ad9c68d40edd600685323f214b2d57")
 
+    variant("shared", default=True, description="Build a shared library")
+    variant(
+        "pic",
+        default=True,
+        when="~shared",
+        description="Build the static library with position-independent code",
+    )
+
     depends_on("c", type="build")  # generated
     depends_on("cxx", type="build")  # generated
+
+    def cmake_args(self):
+        if self.spec.satisfies("+shared"):
+            return []
+        return [
+            self.define("CARES_SHARED", False),
+            self.define("CARES_STATIC", True),
+            self.define_from_variant("CARES_STATIC_PIC", "pic"),
+        ]
 
     def url_for_version(self, version):
         url = "https://github.com/c-ares/c-ares/archive/cares-{0}.tar.gz"
@@ -31,4 +48,5 @@ class CAres(CMakePackage):
 
     @property
     def libs(self):
-        return find_libraries(["libcares"], root=self.prefix, recursive=True)
+        shared = self.spec.satisfies("+shared")
+        return find_libraries(["libcares"], root=self.prefix, recursive=True, shared=shared)
