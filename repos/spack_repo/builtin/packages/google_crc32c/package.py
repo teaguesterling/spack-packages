@@ -19,6 +19,14 @@ class GoogleCrc32c(CMakePackage):
 
     version("1.1.2", sha256="ac07840513072b7fcebda6e821068aa04889018f24e10e46181068fb214d7e56")
 
+    variant("shared", default=True, description="Build a shared library")
+    variant(
+        "pic",
+        default=True,
+        when="~shared",
+        description="Build the static library with position-independent code",
+    )
+
     depends_on("c", type="build")  # generated
     depends_on("cxx", type="build")  # generated
 
@@ -29,6 +37,8 @@ class GoogleCrc32c(CMakePackage):
             self.define("CRC32C_BUILD_TESTS", False),
             self.define("CRC32C_BUILD_BENCHMARKS", False),
             self.define("CRC32C_USE_GLOG", False),
-            self.define("BUILD_SHARED_LIBS", True),
+            self.define_from_variant("BUILD_SHARED_LIBS", "shared"),
         ]
+        if self.spec.satisfies("~shared"):
+            args.append(self.define_from_variant("CMAKE_POSITION_INDEPENDENT_CODE", "pic"))
         return args
