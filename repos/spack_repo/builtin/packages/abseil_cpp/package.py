@@ -85,6 +85,13 @@ class AbseilCpp(CMakePackage):
     conflicts("+shared", when="@:20190808")
 
     variant(
+        "pic",
+        default=False,
+        when="~shared",
+        description="Build the static libraries with position-independent code",
+    )
+
+    variant(
         "cxxstd",
         values=(
             conditional("11", when="@:20220623"),
@@ -107,7 +114,7 @@ class AbseilCpp(CMakePackage):
 
     def cmake_args(self):
         run_tests = self.run_tests and self.spec.satisfies("@20220623:")
-        return [
+        args = [
             self.define("BUILD_TESTING", run_tests),
             self.define("ABSL_BUILD_TESTING", run_tests),
             self.define("ABSL_USE_EXTERNAL_GOOGLETEST", run_tests),
@@ -115,6 +122,9 @@ class AbseilCpp(CMakePackage):
             self.define_from_variant("BUILD_SHARED_LIBS", "shared"),
             self.define_from_variant("CMAKE_CXX_STANDARD", "cxxstd"),
         ]
+        if self.spec.satisfies("+pic"):
+            args.append(self.define("CMAKE_POSITION_INDEPENDENT_CODE", True))
+        return args
 
     @property
     def libs(self):
