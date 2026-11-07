@@ -20,15 +20,26 @@ class Xfconf(AutotoolsPackage):
 
     license("LGPLv2.1", checked_by="teaguesterling")  # https://wiki.xfce.org/licenses/audit
 
+    version("4.20.0", sha256="8bc43c60f1716b13cf35fc899e2a36ea9c6cdc3478a8f051220eef0f53567efd")
     version("4.18.0", sha256="2e8c50160bf800a807aea094fc9dad81f9f361f42db56607508ed5b4855d2906")
     version("4.16.0", sha256="652a119007c67d9ba6c0bc7a740c923d33f32d03dc76dfc7ba682584e72a5425")
 
-    depends_on("intltool@0.35.0:", type="build")
+    depends_on("intltool@0.35.0:", type="build", when="@:4.18")
     with default_args(type=("build", "link", "run")):
         depends_on("libxfce4util")
         depends_on("dbus-glib")
+        with when("@4.20:"):
+            depends_on("glib@2.72:")
+            depends_on("libxfce4util@4.17.3:")
+            depends_on("gettext")
         with when("@4.18"):
             depends_on("glib@2.66:")
             depends_on("gettext")  # Undocumented
         with when("@4.16"):
             depends_on("glib@2.50:")
+
+    def url_for_version(self, version):
+        # Point releases are only in the per-package folders, not in the
+        # release folders under xfce/<series>/src/
+        base = f"https://archive.xfce.org/src/xfce/xfconf/{version.up_to(2)}"
+        return f"{base}/xfconf-{version}.tar.bz2"
