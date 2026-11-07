@@ -24,6 +24,8 @@ class Turbovnc(CMakePackage):
     variant("server", default=True, description="Enable server build")
     variant("x11deps", default=True, description="Depends x11 depends")
 
+    depends_on("c", type="build")
+
     depends_on("libx11", when="+x11deps")
     depends_on("libjpeg-turbo@1.5.1:", when="@2.1:")
     depends_on("openssl")
@@ -55,7 +57,6 @@ class Turbovnc(CMakePackage):
         depends_on("virtualgl")
 
     def cmake_args(self):
-
         options = []
         options.append("-DTVNC_BUILDJAVA:BOOL=OFF")
         options.append("-DTVNC_BUILDNATIVE:BOOL=ON")
