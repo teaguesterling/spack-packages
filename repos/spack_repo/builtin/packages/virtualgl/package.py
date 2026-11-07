@@ -18,6 +18,7 @@ class Virtualgl(CMakePackage):
 
     license("LGPL-2.1-or-later")
 
+    version("3.1.5", sha256="e7fb0f4266219d614de89530c7eea686dd9362897000ed0e541891ea817f2072")
     version("3.1.2", sha256="1e7f1e37e173af972ac34cdd207e856f613da44f474d19b85fe4795b0a16df38")
     version("2.5.2", sha256="e6105f579f25a77a4a190a80f9b239a9f70e007e5e9f4a5a69c9e7cce168d166")
 
