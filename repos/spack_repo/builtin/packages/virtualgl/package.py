@@ -51,3 +51,11 @@ class Virtualgl(CMakePackage):
                 f"set(XCB_GLX_LIB {join_path(self.spec['libxcb'].prefix.lib, 'libxcb-glx.so')})",
                 "CMakeLists.txt",
             )
+            # The faker unit tests call GL 4.5 and EXT_direct_state_access functions
+            # directly. Mesa's non-glvnd libGL does not export them, so the link fails.
+            # The tests are not installed; the faker gets these through glXGetProcAddress.
+            filter_file(
+                r"add_executable\((fakerut|eglxfakerut) ",
+                r"add_executable(\1 EXCLUDE_FROM_ALL ",
+                "CMakeLists.txt",
+            )
