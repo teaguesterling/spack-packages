@@ -27,6 +27,8 @@ class Libxfce4util(AutotoolsPackage):
     variant("introspection", default=True, description="Build with gobject-introspection support")
     variant("vala", default=True, description="Build with vala support")
 
+    depends_on("c", type="build")
+
     with default_args(type="build"):
         depends_on("intltool@0.35.0:", when="@4.16:4.18")
         depends_on("gettext", when="@4.18:")
