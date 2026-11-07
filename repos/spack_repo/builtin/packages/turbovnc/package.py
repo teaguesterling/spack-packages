@@ -29,6 +29,8 @@ class Turbovnc(CMakePackage):
     depends_on("libx11", when="+x11deps")
     depends_on("libjpeg-turbo@1.5.1:", when="@2.1:")
     depends_on("openssl")
+    # TVNC_USEPAM defaults to ON, and CMake stops if security/pam_appl.h is missing.
+    depends_on("linux-pam", when="+server platform=linux")
 
     depends_on("java@17")
     depends_on("libxext", when="+x11deps")
