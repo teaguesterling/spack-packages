@@ -17,6 +17,14 @@ class DuckdbRustySheet(DuckdbCommunityExtensionPackage):
 
     license("MIT")
 
+    # A C API extension that builds with cargo and has no CMake project
+    c_api_version = "v1.2.0"
+    c_api_extension_version = "v0.4.2"
+
+    with when("~prebuilt"):
+        # Cargo.toml has edition 2024, which needs Rust 1.85
+        depends_on("rust@1.85:", type="build")
+
     published_binaries(
         "rusty_sheet",
         "2.0.0",
@@ -36,3 +44,8 @@ class DuckdbRustySheet(DuckdbCommunityExtensionPackage):
         placement="extension_source",
         when="@2.0.0 ~prebuilt",
     )
+
+    def setup_build_environment(self, env: EnvironmentModifications) -> None:
+        super().setup_build_environment(env)
+        if self.spec.satisfies("~prebuilt"):
+            env.set("CARGO_BUILD_JOBS", str(make_jobs))
