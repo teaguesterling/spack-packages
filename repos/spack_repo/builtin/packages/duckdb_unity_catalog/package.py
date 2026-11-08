@@ -17,6 +17,11 @@ class DuckdbUnityCatalog(DuckdbExtensionPackage):
 
     license("MIT")
 
+    with when("link_dependencies=static"):
+        depends_on("croaring~shared+pic", type="build")
+    with when("link_dependencies=shared"):
+        depends_on("croaring+shared", type="link")
+
     published_binaries(
         "unity_catalog",
         "2.0.0",

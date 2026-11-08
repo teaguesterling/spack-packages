@@ -30,6 +30,11 @@ class DuckdbDucklake(DuckdbExtensionPackage):
 
     duckdb_patches = True
 
+    with when("link_dependencies=static"):
+        depends_on("croaring~shared+pic", type="build")
+    with when("link_dependencies=shared"):
+        depends_on("croaring+shared", type="link")
+
     resource(
         name="extension_source",
         git="https://github.com/duckdb/ducklake.git",
