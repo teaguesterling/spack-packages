@@ -17,6 +17,11 @@ class DuckdbPlinkingDuck(DuckdbCommunityExtensionPackage):
 
     license("MIT")
 
+    with when("~prebuilt"):
+        depends_on("eigen", type="build")
+        depends_on("zlib-api", type="build")
+    depends_on("zlib-api", type="link", when="link_dependencies=shared")
+
     published_binaries(
         "plinking_duck",
         "2.0.0",
@@ -37,3 +42,31 @@ class DuckdbPlinkingDuck(DuckdbCommunityExtensionPackage):
         placement="extension_source",
         when="@2.0.0 ~prebuilt",
     )
+
+    @when("~prebuilt")
+    def patch(self):
+        # CMakeLists.txt compiles yyjson from the duckdb submodule of the extension, which
+        # this recipe does not fetch. The DuckDB source here has the same file.
+        filter_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/duckdb/third_party/yyjson",
+            "${CMAKE_SOURCE_DIR}/third_party/yyjson",
+            "extension_source/CMakeLists.txt",
+            string=True,
+        )
+        # The extension installs these targets in the DuckDB export set. CMake refuses an
+        # interface include directory in the source tree, and the extension is in the
+        # DuckDB source tree here, unlike in the upstream CI. $<BUILD_INTERFACE:> keeps the
+        # directories for the build. This belongs upstream.
+        for line in (
+            "plink_libdeflate PUBLIC ${LIBDEFLATE_DIR}",
+            "pgenlib PUBLIC ${PGENLIB_DIR} ${LIBDEFLATE_DIR} ${SIMDE_DIR}",
+            "plink2_glm_math PUBLIC ${PGENLIB_DIR} ${SIMDE_DIR}",
+        ):
+            target, scope, *dirs = line.split()
+            wrapped = " ".join(f"$<BUILD_INTERFACE:{d}>" for d in dirs)
+            filter_file(
+                f"target_include_directories({line})",
+                f"target_include_directories({target} {scope} {wrapped})",
+                "extension_source/CMakeLists.txt",
+                string=True,
+            )
