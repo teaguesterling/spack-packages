@@ -18,6 +18,8 @@ class Turbovnc(CMakePackage):
     homepage = "http://www.turbovnc.org/"
     url = "https://github.com/TurboVNC/turbovnc/releases/download/3.2/turbovnc-3.2.tar.gz"
 
+    maintainers("teaguesterling")
+
     version("3.3.1", sha256="9be0a0764d89f1a234cad7775ea142a01c0efe198523456899883bd6466691da")
     version("3.2", sha256="a4fd895ebb8a40a5962db8c38e3de61e4d22c77d64d2ea0afe8fd78c7a8aff72")
 
