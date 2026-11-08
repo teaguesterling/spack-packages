@@ -17,6 +17,38 @@ class DuckdbAzure(DuckdbExtensionPackage):
 
     license("MIT")
 
+    # The SDK configs find libcurl.a and libxml2.a, which need these
+    source_link_libraries = [
+        ("libiconv", "iconv"),
+        ("openssl", "ssl"),
+        ("openssl", "crypto"),
+        ("zlib-api", "z"),
+    ]
+
+    with when("~prebuilt"):
+        depends_on("curl~nghttp2", type="build")
+        depends_on("libiconv", type="build")
+        depends_on("zlib-api", type="build")
+    with when("link_dependencies=static"):
+        # The versions in the vcpkg baseline of vcpkg.json. A static library of the SDK that
+        # the others need must be static too, or the extension links its shared library.
+        depends_on("azure-core-cpp@1.16.3~shared+pic", type="build")
+        depends_on("azure-identity-cpp@1.13.3~shared+pic", type="build")
+        depends_on("azure-storage-common-cpp@12.14.0~shared+pic", type="build")
+        depends_on("azure-storage-blobs-cpp@12.18.0~shared+pic", type="build")
+        depends_on("azure-storage-files-datalake-cpp@12.16.0~shared+pic", type="build")
+        depends_on("libxml2~shared+pic", type="build")
+    with when("link_dependencies=shared"):
+        depends_on("azure-core-cpp@1.16.3+shared", type="link")
+        depends_on("azure-identity-cpp@1.13.3+shared", type="link")
+        depends_on("azure-storage-common-cpp@12.14.0+shared", type="link")
+        depends_on("azure-storage-blobs-cpp@12.18.0+shared", type="link")
+        depends_on("azure-storage-files-datalake-cpp@12.16.0+shared", type="link")
+        depends_on("curl", type="link")
+        depends_on("libiconv", type="link")
+        depends_on("libxml2+shared", type="link")
+        depends_on("zlib-api", type="link")
+
     published_binaries(
         "azure",
         "2.0.0",
