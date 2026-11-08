@@ -17,6 +17,10 @@ class DuckdbH3(DuckdbCommunityExtensionPackage):
 
     license("Apache-2.0")
 
+    # The C API of its Makefile (TARGET_DUCKDB_VERSION), and the tag of the published binary
+    c_api_version = "v1.2.0"
+    c_api_extension_version = "v1.5.6"
+
     published_binaries(
         "h3",
         "2.0.0",
@@ -36,3 +40,9 @@ class DuckdbH3(DuckdbCommunityExtensionPackage):
         placement="extension_source",
         when="@2.0.0 ~prebuilt",
     )
+
+    def source_cmake_args(self):
+        # h3 finds libm with find_library, which link_dependencies=static makes prefer libm.a,
+        # and that is not position-independent. -lm links the shared system libm, as the
+        # published binary does.
+        return ["-DM_LIB:STRING=m"]
