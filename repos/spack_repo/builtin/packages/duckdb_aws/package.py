@@ -17,6 +17,21 @@ class DuckdbAws(DuckdbExtensionPackage):
 
     license("MIT")
 
+    # The SDK config names libcurl.a, which needs these
+    source_link_libraries = [("openssl", "ssl"), ("openssl", "crypto"), ("zlib-api", "z")]
+
+    _components = "cloudformation,identity-management,rds,redshift,redshift-serverless,sso,sts"
+    with when("~prebuilt"):
+        depends_on("curl~nghttp2", type="build")
+        depends_on("zlib-api", type="build")
+    with when("link_dependencies=static"):
+        # The version in the DuckDB vcpkg registry, with the components of vcpkg.json
+        depends_on(f"aws-sdk-cpp@1.11.820~shared components:={_components}", type="build")
+    with when("link_dependencies=shared"):
+        depends_on(f"aws-sdk-cpp@1.11.820+shared components:={_components}", type="link")
+        depends_on("curl", type="link")
+        depends_on("zlib-api", type="link")
+
     published_binaries(
         "aws",
         "2.0.0",
