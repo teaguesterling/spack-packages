@@ -17,6 +17,11 @@ class DuckdbUrlpattern(DuckdbCommunityExtensionPackage):
 
     license("MIT")
 
+    with when("link_dependencies=static"):
+        depends_on("ada-url~shared+pic", type="build")
+    with when("link_dependencies=shared"):
+        depends_on("ada-url+shared", type="link")
+
     published_binaries(
         "urlpattern",
         "2.0.0",
