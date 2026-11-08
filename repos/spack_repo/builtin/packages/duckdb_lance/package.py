@@ -17,6 +17,13 @@ class DuckdbLance(DuckdbExtensionPackage):
 
     license("Apache-2.0")
 
+    with when("~prebuilt"):
+        # The rust-version of the lance crate in Cargo.lock
+        depends_on("rust@1.91:", type="build")
+        # prost-build runs protoc. The crates build their own copies of aws-lc, ring, zstd, lz4,
+        # bzip2 and liblzma, as the published binary does.
+        depends_on("protobuf", type="build")
+
     published_binaries(
         "lance",
         "2.0.0",
@@ -34,3 +41,17 @@ class DuckdbLance(DuckdbExtensionPackage):
         placement="extension_source",
         when="@2.0.0 ~prebuilt",
     )
+
+    def setup_build_environment(self, env: EnvironmentModifications) -> None:
+        super().setup_build_environment(env)
+        if self.spec.satisfies("~prebuilt"):
+            env.set("CARGO_BUILD_JOBS", str(make_jobs))
+            # CMakeLists.txt passes this to cargo
+            env.set("PROTOC", self.spec["protobuf"].prefix.bin.protoc)
+            # Without this, liblzma-sys links a shared liblzma that pkg-config finds
+            env.set("LZMA_API_STATIC", "1")
+
+    @when("~prebuilt")
+    def patch(self):
+        # Use the crate versions in Cargo.lock
+        filter_file(r"cargo build$", "cargo build --locked", "extension_source/CMakeLists.txt")
