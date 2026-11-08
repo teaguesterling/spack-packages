@@ -17,6 +17,34 @@ class DuckdbGcs(DuckdbCommunityExtensionPackage):
 
     license("MIT")
 
+    # The CMake config of the SDK names libcurl.a, which needs these
+    source_link_libraries = [("openssl", "ssl"), ("openssl", "crypto"), ("zlib-api", "z")]
+
+    with when("~prebuilt"):
+        depends_on("curl~nghttp2", type="build")
+        depends_on("nlohmann-json", type="build")
+        depends_on("zlib-api", type="build")
+    with when("link_dependencies=static"):
+        # The versions in the vcpkg baseline of vcpkg.json. storage_grpc adds storage, and
+        # CMakeLists.txt needs both on Linux. A static library of the stack that the others
+        # need must be static too, or the extension links its shared library.
+        depends_on(
+            "google-cloud-cpp@2.37.0~shared+pic cxxstd=17 libraries=storage_grpc", type="build"
+        )
+        depends_on("grpc@1.76.0~shared~systemd~download_archives cxxstd=17", type="build")
+        depends_on("protobuf@33~shared", type="build")
+        depends_on("abseil-cpp@20260107.1~shared+pic", type="build")
+        depends_on("re2~shared+pic", type="build")
+        depends_on("c-ares~shared+pic", type="build")
+        depends_on("google-crc32c~shared+pic", type="build")
+    with when("link_dependencies=shared"):
+        depends_on("google-cloud-cpp@2.37.0+shared cxxstd=17 libraries=storage_grpc", type="link")
+        depends_on("grpc@1.76.0+shared~systemd~download_archives cxxstd=17", type="link")
+        depends_on("protobuf@33+shared", type="link")
+        depends_on("abseil-cpp@20260107.1+shared", type="link")
+        depends_on("curl", type="link")
+        depends_on("zlib-api", type="link")
+
     published_binaries(
         "gcs",
         "2.0.0",
@@ -36,3 +64,17 @@ class DuckdbGcs(DuckdbCommunityExtensionPackage):
         placement="extension_source",
         when="@2.0.0 ~prebuilt",
     )
+
+    @when("~prebuilt")
+    def patch(self):
+        # The extension installs this target in the DuckDB export set. Its interface include
+        # directory is a target name, which CMake makes a path in the source tree, and CMake
+        # refuses that path in an export. Upstream CI builds the extension outside the DuckDB
+        # source tree, so the path is outside it there. The include directories come from
+        # target_link_libraries, so this line adds only a directory that does not exist.
+        filter_file(
+            "target_include_directories(${EXTENSION_NAME} PUBLIC google-cloud-cpp::storage)",
+            "",
+            "extension_source/CMakeLists.txt",
+            string=True,
+        )
