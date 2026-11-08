@@ -17,6 +17,12 @@ class DuckdbDuckTails(DuckdbCommunityExtensionPackage):
 
     license("Apache-2.0")
 
+    # CMakeLists.txt asks for find_package(libgit2 CONFIG), which libgit2 installs from 1.9
+    with when("link_dependencies=static"):
+        depends_on("libgit2@1.9:~shared+pic~ssh", type="build")
+    with when("link_dependencies=shared"):
+        depends_on("libgit2@1.9:+shared~ssh", type="link")
+
     published_binaries(
         "duck_tails",
         "2.0.0",
