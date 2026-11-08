@@ -9,7 +9,7 @@ import os
 import re
 import shutil
 import urllib.request
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from spack_repo.builtin.build_systems.bundle import BundlePackage
 from spack_repo.builtin.build_systems.generic import Package
@@ -142,6 +142,13 @@ class DuckdbExtensionBase(Package):
 
     #: True if DuckDB has patches for this extension, in .github/patches/extensions
     duckdb_patches = False
+
+    #: For an extension that uses the C API, the version of that API, such as "v1.2.0". Such an
+    #: extension has its own CMake project and does not build in the DuckDB source tree.
+    c_api_version: Optional[str] = None
+
+    #: For an extension that uses the C API, the extension version that its footer records
+    c_api_extension_version: Optional[str] = None
 
     # A version of an extension package is the DuckDB version that it is for
     version("2.0.0", sha256="7e89053255046bfb26afbd7f524a2fb84df7dbef496aa911ea35e4a1182fdc00")
@@ -406,52 +413,107 @@ class DuckdbExtensionBase(Package):
             if not self._links_shared():
                 output.write('set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".so")\n')
 
-        # The extension links the static library of DuckDB, so nothing compiles DuckDB here
-        lib = spec["duckdb"].prefix.lib
-        archives = [os.path.basename(a)[3:-2] for a in glob.glob(join_path(lib, "libduckdb_*.a"))]
-        libraries = " ".join(f"-l{a}" for a in archives if a != "duckdb_static")
         # These go at the end of the link line, because the linker reads a static library in order
         late_libraries = " ".join(
             self._link_library(spec[dep].prefix, library)
             for dep, library in self.source_link_libraries
         )
+        common_args = [
+            "-DCMAKE_BUILD_TYPE=Release",
+            f"-DCMAKE_PROJECT_INCLUDE={static_first}",
+            "-DCMAKE_IGNORE_PREFIX_PATH=/;/usr;/usr/local",
+            "-DCMAKE_SKIP_RPATH=ON",
+            # A build that downloads during CMake fails in an air gap, and it gets code that
+            # no recipe declared. So a download fails here too, and a resource supplies it.
+            "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+            f"-DCMAKE_CXX_STANDARD_LIBRARIES={late_libraries}",
+            *self.source_cmake_args(),
+        ]
+        if self.c_api_version:
+            built, platform = self._build_c_api(spec, extension_dir, build_dir, common_args)
+        else:
+            built, platform = self._build_in_duckdb(spec, source_dir, build_dir, common_args)
+        target_dir = join_path(prefix.lib.duckdb.extensions, f"v{self.version}", platform)
+        mkdirp(target_dir)
+        binary = join_path(target_dir, f"{name}.duckdb_extension")
+        self._check_portable(built)
+        if key is None:
+            # No signature, so a build cache can rewrite the store paths
+            install(built, binary)
+            return binary
+        self._remove_store_paths(built)
+        self._sign(key, built, binary, build_dir)
+        return binary
+
+    def _build_in_duckdb(self, spec, source_dir, build_dir, common_args):
+        """Builds a C++ extension with the build system of DuckDB"""
+        name = self.extension_name
+        # The extension links the static library of DuckDB, so nothing compiles DuckDB here
+        lib = spec["duckdb"].prefix.lib
+        archives = [os.path.basename(a)[3:-2] for a in glob.glob(join_path(lib, "libduckdb_*.a"))]
+        libraries = " ".join(f"-l{a}" for a in archives if a != "duckdb_static")
         with working_dir(build_dir):
             Executable(spec["cmake"].prefix.bin.cmake)(
                 source_dir,
-                "-DCMAKE_BUILD_TYPE=Release",
                 f"-DOVERRIDE_GIT_DESCRIBE=v{self.version}",
-                f"-DDUCKDB_EXTENSION_CONFIGS={config}",
+                f"-DDUCKDB_EXTENSION_CONFIGS={join_path(build_dir, 'extension.cmake')}",
                 "-DBUILD_EXTENSIONS_ONLY=TRUE",
                 "-DBUILD_SHELL=FALSE",
                 "-DBUILD_UNITTESTS=FALSE",
                 # The default profile adds -march=x86-64-v3, whatever the target of the spec
                 "-DDUCKDB_OPTIMIZATION_PROFILE=NONE",
-                f"-DCMAKE_PROJECT_INCLUDE={static_first}",
-                "-DCMAKE_IGNORE_PREFIX_PATH=/;/usr;/usr/local",
-                "-DCMAKE_SKIP_RPATH=ON",
-                # A build that downloads during CMake fails in an air gap, and it gets code that
-                # no recipe declared. So a download fails here too, and a resource supplies it.
-                "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
-                f"-DCMAKE_CXX_STANDARD_LIBRARIES={late_libraries}",
-                *self.source_cmake_args(),
+                *common_args,
                 f"-DCMAKE_SHARED_LINKER_FLAGS=-L{lib}",
                 f"-DDUCKDB_EXTRA_LINK_FLAGS=-Wl,--start-group {libraries} -Wl,--end-group",
             )
             make(f"{name}_loadable_extension")
             with open("duckdb_platform_out") as platform_file:
                 platform = platform_file.read().strip()
-            target_dir = join_path(prefix.lib.duckdb.extensions, f"v{self.version}", platform)
-            mkdirp(target_dir)
-            binary = join_path(target_dir, f"{name}.duckdb_extension")
-            built = join_path("extension", name, f"{name}.duckdb_extension")
-            self._check_portable(built)
-            if key is None:
-                # No signature, so a build cache can rewrite the store paths
-                install(built, binary)
-                return binary
-            self._remove_store_paths(built)
-            self._sign(key, built, binary, build_dir)
-        return binary
+        return join_path(build_dir, "extension", name, f"{name}.duckdb_extension"), platform
+
+    def _build_c_api(self, spec, extension_dir, build_dir, common_args):
+        """Builds an extension that uses the C API, with its own CMake project.
+
+        Such a project builds a shared library, and has no step that adds the footer. This adds
+        the footer with scripts/append_metadata.cmake of DuckDB, as extension-ci-tools does.
+        """
+        name = self.extension_name
+        major, minor, patch_level = self.c_api_version.lstrip("v").split(".")
+        cmake = Executable(spec["cmake"].prefix.bin.cmake)
+        c_api_build = join_path(build_dir, "c_api")
+        mkdirp(c_api_build)
+        with working_dir(c_api_build):
+            cmake(
+                extension_dir,
+                f"-DEXTENSION_NAME={name}",
+                f"-DTARGET_DUCKDB_VERSION_MAJOR={major}",
+                f"-DTARGET_DUCKDB_VERSION_MINOR={minor}",
+                f"-DTARGET_DUCKDB_VERSION_PATCH={patch_level}",
+                *common_args,
+            )
+            make(f"{name}_ext")
+        # The platform of the DuckDB that loads the extension
+        duckdb = Executable(spec["duckdb"].prefix.bin.duckdb)
+        platform = duckdb("-noheader", "-list", "-c", "PRAGMA platform", output=str).strip()
+        platform_file = join_path(build_dir, "platform.txt")
+        null_file = join_path(build_dir, "null.txt")
+        with open(platform_file, "w") as output:
+            output.write(platform)
+        with open(null_file, "wb") as output:
+            output.write(b"\0")
+        built = join_path(build_dir, f"{name}.duckdb_extension")
+        shutil.copyfile(join_path(c_api_build, f"lib{name}.so"), built)
+        cmake(
+            f"-DEXTENSION={built}",
+            f"-DNULL_FILE={null_file}",
+            f"-DPLATFORM_FILE={platform_file}",
+            f"-DVERSION_FIELD={self.c_api_version}",
+            f"-DEXTENSION_VERSION={self.c_api_extension_version}",
+            "-DABI_TYPE=C_STRUCT",
+            "-P",
+            join_path(self.stage.source_path, "scripts", "append_metadata.cmake"),
+        )
+        return built, platform
 
     def _install_fetched(self, spec, prefix):
         """Installs the binary that Spack fetched and verified.
