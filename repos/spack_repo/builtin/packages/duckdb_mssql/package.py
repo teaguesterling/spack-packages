@@ -17,6 +17,19 @@ class DuckdbMssql(DuckdbCommunityExtensionPackage):
 
     license("MIT")
 
+    with when("~prebuilt"):
+        # Kerberos needs only the headers: the extension opens the library with dlopen
+        depends_on("krb5", type="build")
+        depends_on("pkgconfig", type="build")
+        # FindOpenSSL asks for ZLIB::ZLIB, because the static OpenSSL of Spack uses zlib
+        depends_on("zlib-api", type="build")
+    with when("link_dependencies=static"):
+        # The version that vcpkg.json of the extension pins
+        depends_on("simdutf@6.1.1~shared+pic", type="build")
+    with when("link_dependencies=shared"):
+        depends_on("simdutf@6.1.1+shared", type="link")
+        depends_on("zlib-api", type="link")
+
     published_binaries(
         "mssql",
         "2.0.0",
