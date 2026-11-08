@@ -17,6 +17,11 @@ class DuckdbDelta(DuckdbExtensionPackage):
 
     license("MIT")
 
+    with when("~prebuilt"):
+        # The rust-version of the delta-kernel-rs workspace. The crates build their own copies of
+        # aws-lc, ring and zstd, as the published binary does, so they need no other library.
+        depends_on("rust@1.88:", type="build")
+
     published_binaries(
         "delta",
         "2.0.0",
@@ -35,3 +40,51 @@ class DuckdbDelta(DuckdbExtensionPackage):
         placement="extension_source",
         when="@2.0.0 ~prebuilt",
     )
+    # The tag v0.28.0, which CMakeLists.txt clones with ExternalProject
+    resource(
+        name="delta_kernel",
+        git="https://github.com/delta-io/delta-kernel-rs.git",
+        commit="b77d6518b2ae76bcb8796256666ad0de3f7f654b",
+        placement="delta_kernel_source",
+        when="@2.0.0 ~prebuilt",
+    )
+
+    def setup_build_environment(self, env: EnvironmentModifications) -> None:
+        super().setup_build_environment(env)
+        if self.spec.satisfies("~prebuilt"):
+            env.set("CARGO_BUILD_JOBS", str(make_jobs))
+
+    @when("~prebuilt")
+    def patch(self):
+        cmake_lists = join_path("extension_source", "CMakeLists.txt")
+        with open(cmake_lists) as source:
+            text = source.read()
+        kernel = join_path(self.stage.source_path, "delta_kernel_source")
+        replacements = [
+            # ExternalProject copies the resource, so the paths in the build tree stay the same
+            (
+                'GIT_REPOSITORY "https://github.com/delta-io/delta-kernel-rs"\n'
+                "  GIT_TAG v0.28.0\n",
+                f"DOWNLOAD_COMMAND ${{CMAKE_COMMAND}} -E copy_directory {kernel} <SOURCE_DIR>\n",
+            ),
+            # Use the crate versions in Cargo.lock
+            (
+                "cargo build\n    --package delta_kernel_ffi",
+                "cargo build --locked\n    --package delta_kernel_ffi",
+            ),
+            # This builds the acceptance tests, and their build script downloads test data. The
+            # extension does not use them.
+            (
+                "  # Build DATs\n  COMMAND\n"
+                "    ${CMAKE_COMMAND} -E env ${RUST_UNSET_ENV_VARS} ${RUST_ENV_VARS} cargo build\n"
+                "    --manifest-path="
+                "${CMAKE_BINARY_DIR}/rust/src/delta_kernel/acceptance/Cargo.toml\n",
+                "",
+            ),
+        ]
+        for old, new in replacements:
+            if text.count(old) != 1:
+                raise InstallError(f"{cmake_lists} does not have exactly one copy of: {old}")
+            text = text.replace(old, new)
+        with open(cmake_lists, "w") as output:
+            output.write(text)
