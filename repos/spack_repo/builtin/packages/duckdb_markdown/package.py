@@ -17,6 +17,11 @@ class DuckdbMarkdown(DuckdbCommunityExtensionPackage):
 
     license("MIT")
 
+    with when("link_dependencies=static"):
+        depends_on("cmark-gfm~shared", type="build")
+    with when("link_dependencies=shared"):
+        depends_on("cmark-gfm+shared", type="link")
+
     published_binaries(
         "markdown",
         "2.0.0",
@@ -36,3 +41,13 @@ class DuckdbMarkdown(DuckdbCommunityExtensionPackage):
         placement="extension_source",
         when="@2.0.0 ~prebuilt",
     )
+
+    @when("link_dependencies=shared")
+    def patch(self):
+        # CMakeLists.txt links the targets of a static cmark-gfm. A shared cmark-gfm exports the
+        # same targets without the _static suffix.
+        filter_file(
+            r"libcmark-gfm(-extensions)?_static",
+            r"libcmark-gfm\1",
+            "extension_source/CMakeLists.txt",
+        )
