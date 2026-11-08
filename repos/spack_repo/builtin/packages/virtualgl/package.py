@@ -36,7 +36,7 @@ class Virtualgl(CMakePackage):
     depends_on("xcb-util-keysyms", when="@3:")
     depends_on("opencl-headers", when="@3:", type="build")
     depends_on("opencl-icd-loader", when="@3:")
-    depends_on("egl", when="@3:")
+    depends_on("libegl", when="@3:")
 
     @when("@3:")
     def patch(self):
