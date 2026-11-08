@@ -17,6 +17,50 @@ class DuckdbZipfs(DuckdbCommunityExtensionPackage):
 
     license("MIT")
 
+    # FindLibArchive gives only libarchive.a, so these are the libraries that it needs, in
+    # link order. vcpkg builds libarchive with bzip2, crypto, lz4, lzma, xar, zstd and zlib.
+    source_link_libraries = [
+        ("libxml2", "xml2"),
+        ("libiconv", "iconv"),
+        ("xz", "lzma"),
+        ("zstd", "zstd"),
+        ("lz4", "lz4"),
+        ("bzip2", "bz2"),
+        ("openssl", "crypto"),
+        ("zlib-api", "z"),
+    ]
+
+    with when("~prebuilt"):
+        depends_on("libiconv", type="build")
+        depends_on("zlib-api", type="build")
+        depends_on("zstd build_system=cmake", type="build")
+    with when("link_dependencies=static"):
+        # The version in the vcpkg commit that the community builds use
+        depends_on("miniz@3.1.1~shared+pic", type="build")
+        depends_on(
+            "libarchive libs=static compression:=bz2lib,lz4,lzma,zlib,zstd crypto=openssl"
+            " xar=libxml2 ~iconv",
+            type="build",
+        )
+        depends_on("bzip2+pic", type="build")
+        depends_on("libxml2~shared+pic", type="build")
+        depends_on("lz4 libs:=static +pic", type="build")
+        depends_on("xz+pic", type="build")
+    with when("link_dependencies=shared"):
+        depends_on("miniz@3.1.1+shared", type="link")
+        depends_on(
+            "libarchive libs=shared compression:=bz2lib,lz4,lzma,zlib,zstd crypto=openssl"
+            " xar=libxml2 ~iconv",
+            type="link",
+        )
+        depends_on("bzip2+shared", type="link")
+        depends_on("libiconv", type="link")
+        depends_on("libxml2+shared", type="link")
+        depends_on("lz4", type="link")
+        depends_on("xz", type="link")
+        depends_on("zlib-api", type="link")
+        depends_on("zstd", type="link")
+
     published_binaries(
         "zipfs",
         "2.0.0",
