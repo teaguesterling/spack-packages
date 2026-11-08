@@ -18,6 +18,8 @@ class Egl(BundlePackage):
 
     version("1.5")
 
+    provides("libegl")
+
     # This should really be when='platform=linux' but can't because of a
     # current bug in when and how ArchSpecs are constructed
     if sys.platform.startswith("linux"):

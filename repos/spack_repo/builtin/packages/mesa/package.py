@@ -113,7 +113,7 @@ class Mesa(MesonPackage):
 
     # Provides
     provides("libglx", when="+glx")
-    # provides('egl@1.5', when='+egl')
+    provides("libegl", when="+egl")
 
     # Variant dependencies
     with when("+egl"):
