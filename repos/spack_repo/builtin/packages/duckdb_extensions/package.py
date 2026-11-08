@@ -476,22 +476,41 @@ class DuckdbExtensionBase(Package):
 
         Such a project builds a shared library, and has no step that adds the footer. This adds
         the footer with scripts/append_metadata.cmake of DuckDB, as extension-ci-tools does.
+        An extension with a Cargo.toml and no CMakeLists.txt builds with cargo, as
+        makefiles/c_api_extensions/rust.Makefile of extension-ci-tools does. Its recipe must
+        depend on rust.
         """
         name = self.extension_name
-        major, minor, patch_level = self.c_api_version.lstrip("v").split(".")
         cmake = Executable(spec["cmake"].prefix.bin.cmake)
-        c_api_build = join_path(build_dir, "c_api")
-        mkdirp(c_api_build)
-        with working_dir(c_api_build):
-            cmake(
-                extension_dir,
-                f"-DEXTENSION_NAME={name}",
-                f"-DTARGET_DUCKDB_VERSION_MAJOR={major}",
-                f"-DTARGET_DUCKDB_VERSION_MINOR={minor}",
-                f"-DTARGET_DUCKDB_VERSION_PATCH={patch_level}",
-                *common_args,
-            )
-            make(f"{name}_ext")
+        if os.path.exists(join_path(extension_dir, "Cargo.toml")) and not os.path.exists(
+            join_path(extension_dir, "CMakeLists.txt")
+        ):
+            with working_dir(extension_dir):
+                Executable(spec["rust"].prefix.bin.cargo)(
+                    "build",
+                    "--release",
+                    "--locked",
+                    extra_env={
+                        "DUCKDB_EXTENSION_NAME": name,
+                        "DUCKDB_EXTENSION_MIN_DUCKDB_VERSION": self.c_api_version,
+                    },
+                )
+            library = join_path(extension_dir, "target", "release", f"lib{name}.so")
+        else:
+            major, minor, patch_level = self.c_api_version.lstrip("v").split(".")
+            c_api_build = join_path(build_dir, "c_api")
+            mkdirp(c_api_build)
+            with working_dir(c_api_build):
+                cmake(
+                    extension_dir,
+                    f"-DEXTENSION_NAME={name}",
+                    f"-DTARGET_DUCKDB_VERSION_MAJOR={major}",
+                    f"-DTARGET_DUCKDB_VERSION_MINOR={minor}",
+                    f"-DTARGET_DUCKDB_VERSION_PATCH={patch_level}",
+                    *common_args,
+                )
+                make(f"{name}_ext")
+            library = join_path(c_api_build, f"lib{name}.so")
         # The platform of the DuckDB that loads the extension
         duckdb = Executable(spec["duckdb"].prefix.bin.duckdb)
         platform = duckdb("-noheader", "-list", "-c", "PRAGMA platform", output=str).strip()
@@ -502,7 +521,7 @@ class DuckdbExtensionBase(Package):
         with open(null_file, "wb") as output:
             output.write(b"\0")
         built = join_path(build_dir, f"{name}.duckdb_extension")
-        shutil.copyfile(join_path(c_api_build, f"lib{name}.so"), built)
+        shutil.copyfile(library, built)
         cmake(
             f"-DEXTENSION={built}",
             f"-DNULL_FILE={null_file}",
