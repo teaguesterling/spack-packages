@@ -17,6 +17,17 @@ class DuckdbQuack(DuckdbExtensionPackage):
 
     license("MIT")
 
+    # The static OpenSSL of Spack needs zlib, which CMake does not add itself
+    source_link_libraries = [("zlib-api", "z")]
+
+    with when("~prebuilt"):
+        # The extension does not compile with OpenSSL 4, and the published binary has 3.6
+        depends_on("openssl@:3", type="build")
+        depends_on("zlib-api", type="build")
+    with when("link_dependencies=shared"):
+        depends_on("openssl@:3", type="link")
+        depends_on("zlib-api", type="link")
+
     published_binaries(
         "quack",
         "2.0.0",
