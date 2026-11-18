@@ -85,7 +85,7 @@ class Libgit2(CMakePackage):
 
     variant("mmap", default=True, description="Enable mmap support", when="@1.1.1:")
     variant("shared", default=True, description="Build a shared library")
-    variant("pic", default=True, description="Build position-independent code")
+    variant("pic", default=True, description="Build position-independent code", when="~shared")
 
     # Build Dependencies
     depends_on("c", type="build")  # generated
@@ -105,6 +105,8 @@ class Libgit2(CMakePackage):
     depends_on("pcre", when="@0.99: +shared")
 
     conflicts("+curl", when="@0.28:")
+    # ~shared selects static or bundled copies of the other dependencies, but not of libssh2
+    conflicts("+ssh", when="~shared", msg="~shared cannot link libssh2 statically; use ~ssh")
 
     def flag_handler(self, name, flags):
         if name == "cflags" and not self.spec.variants.get("mmap", False):
